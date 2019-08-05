@@ -12,6 +12,7 @@ def optimize(sr_grid, init=None, eps=1e-4, max_iter=100000, verbose=False, s=0, 
 
     if expense is None:
         expense = sr_grid.dot(np.arange(sr_grid.shape[1]))
+    
 
     if init is None:
         new_pdf = np.ones(n)
@@ -24,20 +25,32 @@ def optimize(sr_grid, init=None, eps=1e-4, max_iter=100000, verbose=False, s=0, 
     else:
         raise ValueError('init is not a probability distribution')
 
-
+    min_max_capacity = None
+    
     for i in range(max_iter):
         prior = new_pdf.dot(sr_grid)
-        c = np.exp(sensitivity(sr_grid, prior) - s * expense)
+        c = np.exp(np.clip(sensitivity(sr_grid, prior), a_min=0, a_max=100) - s * expense)
         min_exp_C = new_pdf.dot(c)
-        new_pdf = new_pdf * c / min_exp_C
+#         print(new_pdf[-10:])
+#         print(c[-10:])
+        new_pdf = 0.1 * new_pdf * c / min_exp_C + 0.9 * new_pdf
+        
+        min_capacity = new_pdf.dot(np.log(c))
 
-        min_capacity = np.log(min_exp_C)
-        max_capacity = np.log(np.max(c))
+#         min_capacity = np.log(min_exp_C)
+        
+        if min_max_capacity is None:
+            max_capacity = np.log(np.max(c))
+            min_max_capacity = max_capacity
+        else:
+            max_capacity = min(np.log(np.max(c)), min_max_capacity)
+            min_max_capacity = max_capacity
         # capacity = (min_capacity + max_capacity) / 2
-        capacity = min_capacity
-        accuracy = (max_capacity - min_capacity)
+        capacity = min_capacity + s * new_pdf.dot(expense)
+        accuracy = np.abs((max_capacity - min_capacity) / capacity)
 
         if verbose is True:
+#             print(sensitivity(sr_grid, prior))
             print(f'min: {min_capacity}, max: {max_capacity}, accuracy: {accuracy}')
 
         if accuracy < eps:
@@ -46,7 +59,8 @@ def optimize(sr_grid, init=None, eps=1e-4, max_iter=100000, verbose=False, s=0, 
         warnings.warn(f'Maximum number of iterations ({max_iter}) reached', RuntimeWarning)
 
     fin_exp = new_pdf.dot(expense)
-    capacity = min_capacity + s * fin_exp
+#     capacity = min_capacity + s * fin_exp
+    capacity = sensitivity(sr_grid, prior).dot(new_pdf)
     out_pdf = sr_grid.T.dot(new_pdf)
 
 

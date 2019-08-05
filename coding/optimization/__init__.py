@@ -3,10 +3,11 @@ import numpy as np
 
 def sensitivity(sr_grid, prior):
     # prior = stimulus_pdf.dot(sr_grid)
-    with np.errstate(divide='ignore'):
-        specificity = sr_grid / prior
-        specificity[np.isnan(specificity)] = 1
-        return np.nan_to_num((sr_grid * np.nan_to_num(np.log2(specificity))).sum(axis=1))
+    top_lim = 1e2
+    specificity = np.ones_like(sr_grid) * np.inf
+#     specificity[:,prior > 0] = sr_grid[:,prior > 0] / prior[prior > 0]
+    specificity = sr_grid / prior
+    return np.nan_to_num((sr_grid * np.nan_to_num(np.clip(np.log2(specificity), a_min=-1000, a_max=1000))).sum(axis=1))
 
 def sensitivity_func(sr_func, prior):
     def specificity(x):

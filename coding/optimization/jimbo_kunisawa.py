@@ -4,10 +4,11 @@ from . import sensitivity
 from .blahut_arimoto import optimize as ba_optimize
 
 
-def optimize(sr_grid, init=None, eps=1e-4, max_iter=100000, verbose=False, expense_factor=1, basal_expense=0):
+def optimize(sr_grid, init=None, eps=1e-4, max_iter=100000, verbose=False, expense_factor=1, basal_expense=0, expense=None):
     n = sr_grid.shape[0]  # TODO sjednotit uvodni cast kodu s cutting plane
-
-    expense = sr_grid.dot(np.arange(sr_grid.shape[1])) * expense_factor + basal_expense
+    
+    if expense is None:
+        expense = sr_grid.dot(np.arange(sr_grid.shape[1])) * expense_factor + basal_expense
 
     a = np.min(expense)
 

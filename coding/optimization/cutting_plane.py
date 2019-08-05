@@ -13,7 +13,7 @@ def update_sensitivity_matrix(old_matrix, sr_grid, new_stimulus_pdf):
     vec[1:] = -new_sensitivity
     return np.concatenate((old_matrix, [vec]), axis=0)
 
-def optimize(sr_grid, init=None, eps=1e-2, verbose=False, max_iter=10000):
+def optimize(sr_grid, expense, W, init=None, eps=1e-2, verbose=False, max_iter=10000):
     solvers.options['show_progress'] = False
     solvers.options['glpk'] = dict(msg_lev='GLP_MSG_OFF')
 
@@ -47,9 +47,13 @@ def optimize(sr_grid, init=None, eps=1e-2, verbose=False, max_iter=10000):
 
     # G0 ... p > 0
     G0 = -np.eye(sr_grid.shape[0], sr_grid.shape[0] + 1, 1, dtype=float)
-    G = np.concatenate((G0, sensitivity_matrix))
+    cost_matrix = np.concatenate(([[0]],[expense]), axis=1)
+    
+    G = np.concatenate((cost_matrix, G0, sensitivity_matrix))
+#     G = np.concatenate((G0, sensitivity_matrix))
 
     h = np.zeros(G.shape[0], dtype=float)
+    h[0] = W
 
     min_capacity = 0
     for i in range(max_iter):
@@ -58,20 +62,31 @@ def optimize(sr_grid, init=None, eps=1e-2, verbose=False, max_iter=10000):
         lim = 1e2
         new_sensitivity[new_sensitivity > lim] = lim
         sensitivity_matrix[i,1:] = -new_sensitivity
-        G[G0.shape[0] + i, 1:] = -new_sensitivity
-
-        row_count = G0.shape[0] + i + 1
+#         G[G0.shape[0] + i, 1:] = -new_sensitivity
+        G[G0.shape[0] + i + 1, 1:] = -new_sensitivity
+        
+#         row_count = G0.shape[0] + i + 1
+        row_count = G0.shape[0] + i + 2
 
         if i >= 0:
-            res = solvers.lp(matrix(-d), matrix(G[:row_count]), matrix(h[:row_count]), matrix(A1), matrix(b), solver='glpk')
+            res = solvers.lp(matrix(-d), matrix(G[:row_count]), matrix(h[:row_count]), matrix(A1), matrix(b), solver=None)
         else:
-            res = solvers.lp(-d, G[:row_count], h[:row_count], A1, b, solver='glpk')
-
+            res = solvers.lp(-d, G[:row_count], h[:row_count], A1, b, solver=None)
+        
+#         print(res)
+        
         stimulus_pdfs.append(np.array(res['x']).T[0,1:])
-
-        min_capacity = -(sensitivity_matrix[i][1:] * stimulus_pdfs[-2]).sum()
+        
+        
+        prior = sr_grid.T.dot(stimulus_pdfs[-1])
+        new_sensitivity = sensitivity(sr_grid, prior)
+        lim = 1e2
+        new_sensitivity[new_sensitivity > lim] = lim
+        
+        min_capacity = (new_sensitivity * stimulus_pdfs[-1]).sum()
         max_capacity = -res['primal objective']
-        capacity = (min_capacity + max_capacity) / 2
+#         max_capacity = stimulus
+        capacity = min_capacity
 
         if min_capacity > 0:
             accuracy = (max_capacity - min_capacity) / capacity

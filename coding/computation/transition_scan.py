@@ -1,5 +1,4 @@
-from pyneuron import ShotNoiseConductance, MATThresholds, Neuron, sr_experiment, steady_spike_train
-from neurons import get_mat
+from matsim import get_mat, ShotNoiseConductance, MATThresholds, Neuron, sr_experiment, steady_spike_train
 import numpy as np
 import pandas as pd
 from itertools import product
@@ -8,7 +7,8 @@ from functools import partial
 from tqdm import tqdm
 
 reshaped_results = {}
-time_windows = [250, 500, 750, 1000]
+# time_windows = [250, 500, 750, 1000]
+time_windows = [100, 200, 300, 400, 500]
 
 exc = ShotNoiseConductance(
     rate=2.67,
