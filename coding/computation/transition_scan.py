@@ -5,6 +5,13 @@ from itertools import product
 from multiprocessing import Pool, cpu_count
 from functools import partial
 from tqdm import tqdm
+import argparse
+
+parser = argparse.ArgumentParser(description='Transition scan for selected B')
+parser.add_argument('inhib_ratio', metavar='B', type=float, nargs='?',
+                    help='an integer for the accumulator')
+
+args = parser.parse_args()
 
 reshaped_results = {}
 # time_windows = [250, 500, 750, 1000]
@@ -25,41 +32,43 @@ inh = ShotNoiseConductance(
 
 def intensity_freq_func(intensity, B):
     exc = 2.67 * intensity
-    inh = 3.73 * (1 + B * (intensity - 1))
+    inh = max(0, 3.73 * (1 + B * (intensity - 1)))
     return exc, inh
 
 def get_results(seed):
     # for B in [0, 0.2, 0.4, 0.6, 0.8, 1.0]:
-    for B in [0]:
-        if seed == 0:
-            print(f'B = {B:.1f}')
-            mtqdm = tqdm
-        else:
-            mtqdm = lambda x: x
-        for int1, int2 in mtqdm(list(product(np.logspace(0, 1.6, 100), repeat=2))):
-            RS = get_mat('RS')
-            IB = get_mat('IB')
-            FS = get_mat('FS')
-            CH = get_mat('CH')
+#     for B in args.inhib_ratios:
+    B = args.inhib_ratio
 
-            neuron = Neuron(
-                resting_potential=-80,
-                membrane_resistance=50,
-                membrane_capacitance=0.1,
-                mats=[RS, IB, FS, CH])
+    if seed == 0:
+        print(f'B = {B:.1f}')
+        mtqdm = tqdm
+    else:
+        mtqdm = lambda x: x
+    for int1, int2 in mtqdm(list(product(np.logspace(0, 1.6, 100), repeat=2))):
+        RS = get_mat('RS')
+        IB = get_mat('IB')
+        FS = get_mat('FS')
+        CH = get_mat('CH')
 
-            neuron.append_conductance(exc)
-            neuron.append_conductance(inh)
+        neuron = Neuron(
+            resting_potential=-80,
+            membrane_resistance=50,
+            membrane_capacitance=0.1,
+            mats=[RS, IB, FS, CH])
 
-            func = partial(intensity_freq_func, B=B)
+        neuron.append_conductance(exc)
+        neuron.append_conductance(inh)
 
-            intensities = [int1, int2] * 100
-            res = sr_experiment(neuron, time_windows, 0.1, intensities, func, seed)
+        func = partial(intensity_freq_func, B=B)
 
-            for tw in time_windows:
-                for neuron_name in ['RS','IB','FS','CH']:
-                    reshaped_results[(B, tw, neuron_name, int1, int2)] = res[tw].loc[int1, neuron_name]
-                    reshaped_results[(B, tw, neuron_name, int2, int1)] = res[tw].loc[int2, neuron_name]
+        intensities = [int1, int2] * 100
+        res = sr_experiment(neuron, time_windows, 0.1, intensities, func, seed)
+
+        for tw in time_windows:
+            for neuron_name in ['RS','IB','FS','CH']:
+                reshaped_results[(B, tw, neuron_name, int1, int2)] = res[tw].loc[int1, neuron_name]
+                reshaped_results[(B, tw, neuron_name, int2, int1)] = res[tw].loc[int2, neuron_name]
 
     return pd.Series(reshaped_results).unstack()
 
@@ -74,4 +83,4 @@ n_jobs = cpu_count()
 p = Pool(n_jobs)
 result_list = p.map(get_results, range(n_jobs))
 results_summed = sersum(result_list)
-results_summed.to_pickle('transition_scan.pkl')
+results_summed.to_pickle(f'transition_scan_{args.inhib_ratio}.pkl')
